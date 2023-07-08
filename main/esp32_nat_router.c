@@ -1,3 +1,4 @@
+/* vim: set expandtab fdm=marker ts=4 sw=4 tw=100 et :*/
 /* Console example
 
    This example code is in the Public Domain (or CC0 licensed, at your option.)
@@ -38,6 +39,13 @@
 #include "lwip/lwip_napt.h"
 
 #include "router_globals.h"
+
+
+// Display
+#include "ssd1306.h"
+#include "font8x8_basic.h"
+
+#define tag "SSD1306"
 
 // On board LED
 #define BLINK_GPIO 2
@@ -503,6 +511,19 @@ char* param_set_default(const char* def_val) {
 
 void app_main(void)
 {
+    // Display
+	SSD1306_t dev;
+
+	ESP_LOGI(tag, "INTERFACE is i2c");
+	ESP_LOGI(tag, "CONFIG_SDA_GPIO=%d",CONFIG_SDA_GPIO);
+	ESP_LOGI(tag, "CONFIG_SCL_GPIO=%d",CONFIG_SCL_GPIO);
+	ESP_LOGI(tag, "CONFIG_RESET_GPIO=%d",CONFIG_RESET_GPIO);
+	i2c_master_init(&dev, CONFIG_SDA_GPIO, CONFIG_SCL_GPIO, CONFIG_RESET_GPIO);
+    ESP_LOGI(tag, "Panel is 128x64");
+	ssd1306_init(&dev, 128, 64);
+	ssd1306_clear_screen(&dev, false);
+	ssd1306_contrast(&dev, 0xff);
+
     initialize_nvs();
 
 #if CONFIG_STORE_HISTORY
@@ -618,6 +639,43 @@ void app_main(void)
 
     /* Main loop */
     while(true) {
+        wifi_sta_list_t wifi_sta_list;
+        tcpip_adapter_sta_list_t adapter_sta_list;
+
+        memset(&wifi_sta_list, 0, sizeof(wifi_sta_list));
+        memset(&adapter_sta_list, 0, sizeof(adapter_sta_list));
+
+        esp_wifi_ap_get_sta_list(&wifi_sta_list);
+        tcpip_adapter_get_sta_list(&wifi_sta_list, &adapter_sta_list);
+
+	    ssd1306_clear_screen(&dev, false);
+
+        // get the SSID of the network the ESP32 is connected to
+        wifi_config_t conf;
+        esp_wifi_get_config(WIFI_IF_STA, &conf);
+        char ssid[sizeof(conf.ap.ssid) + 1];
+        memcpy(ssid, conf.ap.ssid, sizeof(conf.ap.ssid));
+        ssid[sizeof(conf.ap.ssid)] = '\0';
+        ssd1306_display_text(&dev, 0, ssid, strlen(ssid), false);
+
+        for(int i = 0; i < wifi_sta_list.num; i++) {
+            tcpip_adapter_sta_info_t station = adapter_sta_list.sta[i];
+
+            // get the MAC address
+            uint8_t* mac = station.mac;
+
+            // convert the MAC address to a string
+            char mac_str[18];
+            sprintf(mac_str, ": %02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+            // display the MAC address on the SSD1306 display
+            ssd1306_display_text(&dev, i+2, mac_str, strlen(mac_str), false);
+        }
+
+        sleep(5);
+
+        continue;
+
         /* Get a line using linenoise.
          * The line is returned when ENTER is pressed.
          */
